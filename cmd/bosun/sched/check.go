@@ -96,12 +96,15 @@ func (s *Schedule) RunHistory(r *RunHistory) {
 	s.Lock("RunHistory")
 	defer s.Unlock()
 	for ak, event := range r.Events {
+		// get existing state object for alert key. add to schedule status if doesn't already exist
 		state := s.status[ak]
 		if state == nil {
 			state = NewStatus(ak)
 			s.status[ak] = state
 		}
+		// make sure we always touch the state.
 		state.Touched = r.Start
+		// set state.Result according to event result
 		if event.Error != nil {
 			state.Result = event.Error
 		} else if event.Crit != nil {
@@ -109,13 +112,14 @@ func (s *Schedule) RunHistory(r *RunHistory) {
 		} else if event.Warn != nil {
 			state.Result = event.Warn
 		}
-		last := state.AbnormalStatus()
+		// if event is unevaluated, we are done.
 		state.Unevaluated = event.Unevaluated
 		if event.Unevaluated {
 			continue
 		}
+		// assign incident id to new event if applicable
 		prev := state.Last()
-		event.Time = time.Now().UTC()
+		event.Time = r.Start
 		if prev.IncidentId != 0 {
 			// If last event has incident id and is not closed, we continue it.
 			s.incidentLock.Lock()
@@ -128,11 +132,13 @@ func (s *Schedule) RunHistory(r *RunHistory) {
 			// Otherwise, create new incident on first non-normal event.
 			event.IncidentId = s.createIncident(ak, event.Time).Id
 		}
+		// add new event to state
+		last := state.AbnormalStatus()
 		state.Append(event)
 		a := s.Conf.Alerts[ak.Name()]
 		wasOpen := state.Open
+		// render templates and open alert key if abnormal
 		if event.Status > StNormal {
-
 			s.executeTemplates(state, event, a, r)
 			state.Open = true
 			if a.Log {
