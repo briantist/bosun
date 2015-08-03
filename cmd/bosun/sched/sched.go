@@ -466,32 +466,6 @@ func (s *Schedule) Close() {
 	s.Unlock()
 }
 
-func (s *Schedule) Run() error {
-	if s.Conf == nil {
-		return fmt.Errorf("sched: nil configuration")
-	}
-	s.nc = make(chan interface{}, 1)
-	if s.Conf.Ping {
-		go s.PingHosts()
-	}
-	go s.Poll()
-	go s.performSave()
-	interval := uint64(0)
-	for {
-		wait := time.After(s.Conf.CheckFrequency)
-		log.Println("starting check")
-		now := time.Now()
-		dur, err := s.Check(nil, now, interval)
-		if err != nil {
-			log.Println(err)
-		}
-		log.Printf("check took %v\n", dur)
-		s.LastCheck = now
-		<-wait
-		interval++
-	}
-}
-
 const pingFreq = time.Second * 15
 
 func (s *Schedule) PingHosts() {

@@ -47,7 +47,6 @@ type Conf struct {
 	UnknownThreshold int
 	Templates        map[string]*Template
 	Alerts           map[string]*Alert
-	OrderedAlerts    []*Alert                 `json:"-"` //alerts in order they appear.
 	Notifications    map[string]*Notification `json:"-"`
 	RawText          string
 	Macros           map[string]*Macro
@@ -925,7 +924,6 @@ func (c *Conf) loadAlert(s *parse.SectionNode) {
 	}
 	a.returnType = ret
 	c.Alerts[name] = &a
-	c.OrderedAlerts = append(c.OrderedAlerts, &a)
 }
 
 func (c *Conf) loadNotification(s *parse.SectionNode) {

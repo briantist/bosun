@@ -389,24 +389,6 @@ func (r *RunHistory) GetUnknownAndUnevaluatedAlertKeys(alert string) (unknown, u
 	return unknown, uneval
 }
 
-// Check evaluates all critical and warning alert rules. An error is returned if
-// the check could not be performed.
-func (s *Schedule) Check(T miniprofiler.Timer, now time.Time, interval uint64) (time.Duration, error) {
-	r := s.NewRunHistory(now, cache.New(0))
-	start := time.Now()
-	for _, ak := range s.findUnknownAlerts(now) {
-		r.Events[ak] = &Event{Status: StUnknown}
-	}
-	for _, a := range s.Conf.OrderedAlerts {
-		if interval%uint64(a.RunEvery) == 0 {
-			s.CheckAlert(T, r, a)
-		}
-	}
-	d := time.Since(start)
-	s.RunHistory(r)
-	return d, nil
-}
-
 var bosunStartupTime = time.Now()
 
 func (s *Schedule) findUnknownAlerts(now time.Time) []expr.AlertKey {
