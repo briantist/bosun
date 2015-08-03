@@ -20,20 +20,28 @@ func (s *Schedule) Run() error {
 	}
 	go s.Poll()
 	go s.performSave()
+	go s.updateCheckContext()
 	for _, a := range s.Conf.Alerts {
 		go s.RunAlert(a)
 	}
 	return nil
 }
-
+func (s *Schedule) updateCheckContext() {
+	for {
+		ctx := &checkContext{time.Now(), cache.New(0)}
+		s.ctx = ctx
+		time.Sleep(s.Conf.CheckFrequency)
+	}
+}
 func (s *Schedule) RunAlert(a *conf.Alert) {
 	for {
 		wait := time.After(s.Conf.CheckFrequency * time.Duration(a.RunEvery))
 		slog.Infof("starting check on %s", a.Name)
 		//run the alert
 		start := time.Now()
-		checkTime := time.Now()    // TODO: use schedule time
-		checkCache := cache.New(0) // TODO: schedule maintains current cache to share between alerts
+		ctx := s.ctx
+		checkTime := ctx.runTime
+		checkCache := ctx.checkCache
 		rh := s.NewRunHistory(checkTime, checkCache)
 		for _, ak := range s.findUnknownAlerts(checkTime) { //TODO: findUnknown more targeted on alert
 			if ak.Name() == a.Name {

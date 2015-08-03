@@ -15,6 +15,7 @@ import (
 	"bosun.org/_third_party/github.com/MiniProfiler/go/miniprofiler"
 	"bosun.org/_third_party/github.com/bradfitz/slice"
 	"bosun.org/_third_party/github.com/tatsushid/go-fastping"
+	"bosun.org/cmd/bosun/cache"
 	"bosun.org/cmd/bosun/conf"
 	"bosun.org/cmd/bosun/expr"
 	"bosun.org/cmd/bosun/search"
@@ -44,6 +45,7 @@ type Schedule struct {
 	Incidents     map[uint64]*Incident
 	Search        *search.Search
 
+	// TODO: This makes little sense now too.
 	LastCheck     time.Time
 	nc            chan interface{}
 	notifications map[*conf.Notification][]*State
@@ -51,6 +53,13 @@ type Schedule struct {
 	maxIncidentId uint64
 	incidentLock  sync.Mutex
 	db            *bolt.DB
+
+	ctx *checkContext
+}
+
+type checkContext struct {
+	runTime    time.Time
+	checkCache *cache.Cache
 }
 
 func init() {
@@ -433,6 +442,7 @@ func (s *Schedule) Init(c *conf.Conf) error {
 	s.Incidents = make(map[uint64]*Incident)
 	s.status = make(States)
 	s.Search = search.NewSearch()
+	s.ctx = &checkContext{time.Now(), cache.New(0)}
 	if c.StateFile != "" {
 		s.db, err = bolt.Open(c.StateFile, 0600, nil)
 		if err != nil {

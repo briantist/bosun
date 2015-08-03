@@ -108,7 +108,7 @@ func Listen(listenAddr string, devMode bool, tsdbHost string) error {
 	router.Handle("/api/tagk/{metric}", JSON(TagKeysByMetric))
 	router.Handle("/api/tagv/{tagk}", JSON(TagValuesByTagKey))
 	router.Handle("/api/tagv/{tagk}/{metric}", JSON(TagValuesByMetricTagKey))
-	router.Handle("/api/run", JSON(Run))
+	//router.Handle("/api/run", JSON(Run))
 	router.HandleFunc("/api/version", Version)
 	router.Handle("/api/debug/schedlock", JSON(ScheduleLockStatus))
 	http.Handle("/", miniprofiler.NewHandler(Index))
@@ -570,17 +570,18 @@ func APIRedirect(w http.ResponseWriter, req *http.Request) {
 
 var checkRunning = make(chan bool, 1)
 
-func Run(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (interface{}, error) {
-	select {
-	case checkRunning <- true:
-		// Good, we've got the lock.
-	default:
-		return 0, fmt.Errorf("check already running")
-	}
-	d, err := schedule.Check(t, time.Now(), 0)
-	<-checkRunning
-	return d, err
-}
+//TODO: This makes less sense with every alert running independently.
+//func Run(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (interface{}, error) {
+//	select {
+//	case checkRunning <- true:
+//		// Good, we've got the lock.
+//	default:
+//		return 0, fmt.Errorf("check already running")
+//	}
+//	d, err := schedule.Check(t, time.Now(), 0)
+//	<-checkRunning
+//	return d, err
+//}
 
 func Host(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (interface{}, error) {
 	return schedule.Host(r.FormValue("filter")), nil
