@@ -360,32 +360,20 @@ func (s *Schedule) CollectStates() {
 func (r *RunHistory) GetUnknownAndUnevaluatedAlertKeys(alert string) (unknown, uneval []expr.AlertKey) {
 	unknown = []expr.AlertKey{}
 	uneval = []expr.AlertKey{}
-	anyFound := false
-	for ak, ev := range r.Events {
+
+	r.schedule.Lock("GetUnknownUneval")
+	for ak, st := range r.schedule.status {
 		if ak.Name() != alert {
 			continue
 		}
-		anyFound = true
-		if ev.Status == StUnknown {
+		if st.Last().Status == StUnknown {
 			unknown = append(unknown, ak)
-		} else if ev.Unevaluated {
+		} else if st.Last().Unevaluated {
 			uneval = append(uneval, ak)
 		}
 	}
-	if !anyFound {
-		r.schedule.Lock("GetUnknownUneval")
-		for ak, st := range r.schedule.status {
-			if ak.Name() != alert {
-				continue
-			}
-			if st.Last().Status == StUnknown {
-				unknown = append(unknown, ak)
-			} else if st.Last().Unevaluated {
-				uneval = append(uneval, ak)
-			}
-		}
-		r.schedule.Unlock()
-	}
+	r.schedule.Unlock()
+
 	return unknown, uneval
 }
 
