@@ -108,7 +108,6 @@ func Listen(listenAddr string, devMode bool, tsdbHost string) error {
 	router.Handle("/api/tagk/{metric}", JSON(TagKeysByMetric))
 	router.Handle("/api/tagv/{tagk}", JSON(TagValuesByTagKey))
 	router.Handle("/api/tagv/{tagk}/{metric}", JSON(TagValuesByMetricTagKey))
-	//router.Handle("/api/run", JSON(Run))
 	router.HandleFunc("/api/version", Version)
 	router.Handle("/api/debug/schedlock", JSON(ScheduleLockStatus))
 	http.Handle("/", miniprofiler.NewHandler(Index))
@@ -287,6 +286,8 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 	req.Body.Close()
 }
 
+//TODO: not so good a health check anymore.
+//Perhaps a debug endpoint for which checks are running for how long would be useful.
 type Health struct {
 	// RuleCheck is true if last check happened within the check frequency window.
 	RuleCheck bool
@@ -567,21 +568,6 @@ func Config(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) {
 func APIRedirect(w http.ResponseWriter, req *http.Request) {
 	http.Redirect(w, req, "http://bosun.org/api.html", 302)
 }
-
-var checkRunning = make(chan bool, 1)
-
-//TODO: This makes less sense with every alert running independently.
-//func Run(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (interface{}, error) {
-//	select {
-//	case checkRunning <- true:
-//		// Good, we've got the lock.
-//	default:
-//		return 0, fmt.Errorf("check already running")
-//	}
-//	d, err := schedule.Check(t, time.Now(), 0)
-//	<-checkRunning
-//	return d, err
-//}
 
 func Host(t miniprofiler.Timer, w http.ResponseWriter, r *http.Request) (interface{}, error) {
 	return schedule.Host(r.FormValue("filter")), nil
