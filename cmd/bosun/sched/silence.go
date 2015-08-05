@@ -87,7 +87,7 @@ func (s *Schedule) Silenced() map[expr.AlertKey]Silence {
 		if !si.ActiveAt(now) {
 			continue
 		}
-		for ak := range s.status {
+		for ak := range s.status { //TODO: This is unsafe.
 			if si.Silenced(now, ak.Name(), ak.Group()) {
 				if aks[ak].End.Before(si.End) {
 					aks[ak] = *si

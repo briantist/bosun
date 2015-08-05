@@ -41,11 +41,19 @@ func NewStatus(ak expr.AlertKey) *State {
 	}
 }
 
+// Get a copy of the status for the specified alert key
 func (s *Schedule) GetStatus(ak expr.AlertKey) *State {
 	s.Lock("GetStatus")
 	state := s.status[ak]
+	state = state.Copy()
 	s.Unlock()
 	return state
+}
+
+func (s *Schedule) SetStatus(ak expr.AlertKey, st *State) {
+	s.Lock("SetStatus")
+	s.status[ak] = st
+	s.Unlock()
 }
 
 func (s *Schedule) GetOrCreateStatus(ak expr.AlertKey) *State {
@@ -93,14 +101,13 @@ func (s *Schedule) NewRunHistory(start time.Time, cache *cache.Cache) *RunHistor
 func (s *Schedule) RunHistory(r *RunHistory) {
 	checkNotify := false
 	silenced := s.Silenced()
-	s.Lock("RunHistory")
-	defer s.Unlock()
 	for ak, event := range r.Events {
 		// get existing state object for alert key. add to schedule status if doesn't already exist
-		state := s.status[ak]
+		state := s.GetStatus(ak)
+		defer s.SetStatus(ak, state)
 		if state == nil {
 			state = NewStatus(ak)
-			s.status[ak] = state
+			s.SetStatus(ak, state)
 		}
 		// make sure we always touch the state.
 		state.Touched = r.Start
@@ -222,7 +229,7 @@ func (s *Schedule) RunHistory(r *RunHistory) {
 		s.nc <- true
 	}
 	s.CollectStates()
-	s.readStatus = s.status.Copy()
+	s.readStatus = s.status.Copy() //TODO: Is this the right place for this?
 }
 
 func (s *Schedule) executeTemplates(state *State, event *Event, a *conf.Alert, r *RunHistory) {
