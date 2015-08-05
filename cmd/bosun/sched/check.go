@@ -200,6 +200,7 @@ func (s *Schedule) RunHistory(r *RunHistory) {
 			state.NeedAck = false
 			delete(s.Notifications, ak)
 		}
+		s.Lock("RunHistory") // lock while we change notifications.
 		// last could be StNone if it is new. Set it to normal if so because StNormal >
 		// StNone. If the state is not open (closed), then the last state we care about
 		// isn't the last abnormal state, it's just normal.
@@ -224,12 +225,14 @@ func (s *Schedule) RunHistory(r *RunHistory) {
 				}(ak)
 			}
 		}
+		s.Unlock()
 	}
 	if checkNotify && s.nc != nil {
 		s.nc <- true
 	}
+	//TODO: Is this the right place for either of these?
 	s.CollectStates()
-	s.readStatus = s.status.Copy() //TODO: Is this the right place for this?
+	s.readStatus = s.status.Copy()
 }
 
 func (s *Schedule) executeTemplates(state *State, event *Event, a *conf.Alert, r *RunHistory) {
