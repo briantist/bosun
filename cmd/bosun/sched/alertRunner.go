@@ -31,6 +31,9 @@ func (s *Schedule) updateCheckContext() {
 		ctx := &checkContext{time.Now(), cache.New(0)}
 		s.ctx = ctx
 		time.Sleep(s.Conf.CheckFrequency)
+		s.Lock("CollectStates")
+		s.CollectStates()
+		s.Unlock()
 	}
 }
 func (s *Schedule) RunAlert(a *conf.Alert) {

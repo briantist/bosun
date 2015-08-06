@@ -37,7 +37,6 @@ type Schedule struct {
 
 	Conf          *conf.Conf
 	status        States
-	readStatus    States // READ-ONLY copy of status. Updated after each runHistory
 	Notifications map[expr.AlertKey]map[string]time.Time
 	Silence       map[string]*Silence
 	Group         map[time.Time]expr.AlertKeys
@@ -316,6 +315,8 @@ func (s *Schedule) MarshalGroups(T miniprofiler.Timer, filter string) (*StateGro
 	t := StateGroups{
 		TimeAndDate: s.Conf.TimeAndDate,
 	}
+	s.Lock("MarshallGroups")
+	defer s.Unlock()
 	T.Step("Setup", func(miniprofiler.Timer) {
 
 		matches, err2 := makeFilter(filter)
@@ -323,7 +324,7 @@ func (s *Schedule) MarshalGroups(T miniprofiler.Timer, filter string) (*StateGro
 			err = err2
 			return
 		}
-		for k, v := range s.readStatus {
+		for k, v := range s.status {
 			if !v.Open {
 				continue
 			}
@@ -449,7 +450,6 @@ func (s *Schedule) Init(c *conf.Conf) error {
 			return err
 		}
 	}
-	s.readStatus = s.status.Copy()
 	return nil
 }
 

@@ -230,9 +230,6 @@ func (s *Schedule) RunHistory(r *RunHistory) {
 	if checkNotify && s.nc != nil {
 		s.nc <- true
 	}
-	//TODO: Is this the right place for either of these?
-	s.CollectStates()
-	s.readStatus = s.status.Copy()
 }
 
 func (s *Schedule) executeTemplates(state *State, event *Event, a *conf.Alert, r *RunHistory) {
