@@ -106,11 +106,11 @@ func (s *Schedule) RunHistory(r *RunHistory) {
 	for ak, event := range r.Events {
 		// get existing state object for alert key. add to schedule status if doesn't already exist
 		state := s.GetStatus(ak)
-		defer s.SetStatus(ak, state)
 		if state == nil {
 			state = NewStatus(ak)
 			s.SetStatus(ak, state)
 		}
+		defer s.SetStatus(ak, state)
 		// make sure we always touch the state.
 		state.Touched = r.Start
 		// set state.Result according to event result
