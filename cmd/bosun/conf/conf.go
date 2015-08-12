@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net"
+	"net/http"
 	"net/mail"
 	"net/url"
 	"os"
@@ -58,6 +59,7 @@ type Conf struct {
 
 	TSDBHost             string                    // OpenTSDB relay and query destination: ny-devtsdb04:4242
 	GraphiteHost         string                    // Graphite query host: foo.bar.baz
+	GraphiteHeaders      []string                  // extra http headers when querying graphite.
 	LogstashElasticHosts expr.LogstashElasticHosts // CSV Elastic Hosts (All part of the same cluster) that stores logstash documents, i.e http://ny-elastic01:9200
 
 	tree            *parse.Tree
@@ -82,6 +84,17 @@ func (c *Conf) TSDBContext() opentsdb.Context {
 func (c *Conf) GraphiteContext() graphite.Context {
 	if c.GraphiteHost == "" {
 		return nil
+	}
+	if len(c.GraphiteHeaders) > 0 {
+		headers := http.Header(make(map[string][]string))
+		for _, s := range c.GraphiteHeaders {
+			kv := strings.Split(s, ":")
+			headers.Add(kv[0], kv[1])
+		}
+		return graphite.HostHeader{
+			Host:   c.GraphiteHost,
+			Header: headers,
+		}
 	}
 	return graphite.Host(c.GraphiteHost)
 }
@@ -390,6 +403,11 @@ func (c *Conf) loadGlobal(p *parse.PairNode) {
 		c.TSDBHost = v
 	case "graphiteHost":
 		c.GraphiteHost = v
+	case "graphiteHeader":
+		if !strings.Contains(v, ":") {
+			c.errorf("graphiteHeader must be in key:value form")
+		}
+		c.GraphiteHeaders = append(c.GraphiteHeaders, v)
 	case "logstashElasticHosts":
 		c.LogstashElasticHosts = strings.Split(v, ",")
 	case "httpListen":
@@ -1044,7 +1062,7 @@ func (c *Conf) Expand(v string, vars map[string]string, ignoreBadExpand bool) st
 func (c *Conf) seen(v string, m map[string]bool) {
 	if m[v] {
 		switch v {
-		case "squelch", "critNotification", "warnNotification":
+		case "squelch", "critNotification", "warnNotification", "graphiteHeader":
 			// ignore
 		default:
 			c.errorf("duplicate key: %s", v)
