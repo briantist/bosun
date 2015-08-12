@@ -104,134 +104,142 @@ func (s *Schedule) RunHistory(r *RunHistory) {
 	checkNotify := false
 	silenced := s.Silenced()
 	for ak, event := range r.Events {
-		// get existing state object for alert key. add to schedule status if doesn't already exist
-		state := s.GetStatus(ak)
-		if state == nil {
-			state = NewStatus(ak)
-			s.SetStatus(ak, state)
-		}
-		defer s.SetStatus(ak, state)
-		// make sure we always touch the state.
-		state.Touched = r.Start
-		// set state.Result according to event result
-		if event.Error != nil {
-			state.Result = event.Error
-		} else if event.Crit != nil {
-			state.Result = event.Crit
-		} else if event.Warn != nil {
-			state.Result = event.Warn
-		}
-		// if event is unevaluated, we are done.
-		state.Unevaluated = event.Unevaluated
-		if event.Unevaluated {
-			continue
-		}
-		// assign incident id to new event if applicable
-		prev := state.Last()
-		event.Time = r.Start
-		if prev.IncidentId != 0 {
-			// If last event has incident id and is not closed, we continue it.
-			s.incidentLock.Lock()
-			if incident, ok := s.Incidents[prev.IncidentId]; ok && incident.End == nil {
-				event.IncidentId = prev.IncidentId
-			}
-			s.incidentLock.Unlock()
-		}
-		if event.IncidentId == 0 && event.Status != StNormal {
-			// Otherwise, create new incident on first non-normal event.
-			event.IncidentId = s.createIncident(ak, event.Time).Id
-		}
-		// add new event to state
-		last := state.AbnormalStatus()
-		state.Append(event)
-		a := s.Conf.Alerts[ak.Name()]
-		wasOpen := state.Open
-		// render templates and open alert key if abnormal
-		if event.Status > StNormal {
-			s.executeTemplates(state, event, a, r)
-			state.Open = true
-			if a.Log {
-				state.Open = false
-			}
-		}
-		// On state increase, clear old notifications and notify current.
-		// On state decrease, and if the old alert was already acknowledged, notify current.
-		// If the old alert was not acknowledged, do nothing.
-		// Do nothing if state did not change.
-		notify := func(ns *conf.Notifications) {
-			if a.Log {
-				lastLogTime := state.LastLogTime
-				now := time.Now()
-				if now.Before(lastLogTime.Add(a.MaxLogFrequency)) {
-					return
-				}
-				state.LastLogTime = now
-			}
-			nots := ns.Get(s.Conf, state.Group)
-			for _, n := range nots {
-				s.Notify(state, n)
-				checkNotify = true
-			}
-		}
-		notifyCurrent := func() {
-			// Auto close ignoreUnknowns.
-			if a.IgnoreUnknown && event.Status == StUnknown {
-				state.Open = false
-				state.Forgotten = true
-				state.NeedAck = false
-				state.Action("bosun", "Auto close because alert has ignoreUnknown.", ActionClose, event.Time)
-				slog.Infof("auto close %s because alert has ignoreUnknown", ak)
-				return
-			} else if silenced[ak].Forget && event.Status == StUnknown {
-				state.Open = false
-				state.Forgotten = true
-				state.NeedAck = false
-				state.Action("bosun", "Auto close because alert is silenced and marked auto forget.", ActionClose, event.Time)
-				slog.Infof("auto close %s because alert is silenced and marked auto forget", ak)
-				return
-			}
-			state.NeedAck = true
-			switch event.Status {
-			case StCritical, StUnknown:
-				notify(a.CritNotification)
-			case StWarning:
-				notify(a.WarnNotification)
-			}
-		}
-		clearOld := func() {
-			state.NeedAck = false
-			delete(s.Notifications, ak)
-		}
-		s.Lock("RunHistory") // lock while we change notifications.
-		// last could be StNone if it is new. Set it to normal if so because StNormal >
-		// StNone. If the state is not open (closed), then the last state we care about
-		// isn't the last abnormal state, it's just normal.
-		if last < StNormal || !wasOpen {
-			last = StNormal
-		}
-		if event.Status > last {
-			clearOld()
-			notifyCurrent()
-		} else if event.Status < last {
-			if _, hasOld := s.Notifications[ak]; hasOld {
-				notifyCurrent()
-			}
-			// Auto close silenced alerts.
-			if _, ok := silenced[ak]; ok && event.Status == StNormal {
-				go func(ak expr.AlertKey) {
-					slog.Infof("auto close %s because was silenced", ak)
-					err := s.Action("bosun", "Auto close because was silenced.", ActionClose, ak)
-					if err != nil {
-						slog.Errorln(err)
-					}
-				}(ak)
-			}
-		}
-		s.Unlock()
+		checkNotify = s.runHistory(r, ak, event, silenced) || checkNotify
 	}
 	if checkNotify && s.nc != nil {
 		s.nc <- true
 	}
+}
+
+// RunHistory for a single alert key. Returns true if notifications were altered.
+func (s *Schedule) runHistory(r *RunHistory, ak expr.AlertKey, event *Event, silenced map[expr.AlertKey]Silence) bool {
+	checkNotify := false
+	// get existing state object for alert key. add to schedule status if doesn't already exist
+	state := s.GetStatus(ak)
+	if state == nil {
+		state = NewStatus(ak)
+		s.SetStatus(ak, state)
+	}
+	defer s.SetStatus(ak, state)
+	// make sure we always touch the state.
+	state.Touched = r.Start
+	// set state.Result according to event result
+	if event.Error != nil {
+		state.Result = event.Error
+	} else if event.Crit != nil {
+		state.Result = event.Crit
+	} else if event.Warn != nil {
+		state.Result = event.Warn
+	}
+	// if event is unevaluated, we are done.
+	state.Unevaluated = event.Unevaluated
+	if event.Unevaluated {
+		return checkNotify
+	}
+	// assign incident id to new event if applicable
+	prev := state.Last()
+	event.Time = r.Start
+	if prev.IncidentId != 0 {
+		// If last event has incident id and is not closed, we continue it.
+		s.incidentLock.Lock()
+		if incident, ok := s.Incidents[prev.IncidentId]; ok && incident.End == nil {
+			event.IncidentId = prev.IncidentId
+		}
+		s.incidentLock.Unlock()
+	}
+	if event.IncidentId == 0 && event.Status != StNormal {
+		// Otherwise, create new incident on first non-normal event.
+		event.IncidentId = s.createIncident(ak, event.Time).Id
+	}
+	// add new event to state
+	last := state.AbnormalStatus()
+	state.Append(event)
+	a := s.Conf.Alerts[ak.Name()]
+	wasOpen := state.Open
+	// render templates and open alert key if abnormal
+	if event.Status > StNormal {
+		s.executeTemplates(state, event, a, r)
+		state.Open = true
+		if a.Log {
+			state.Open = false
+		}
+	}
+	// On state increase, clear old notifications and notify current.
+	// On state decrease, and if the old alert was already acknowledged, notify current.
+	// If the old alert was not acknowledged, do nothing.
+	// Do nothing if state did not change.
+	notify := func(ns *conf.Notifications) {
+		if a.Log {
+			lastLogTime := state.LastLogTime
+			now := time.Now()
+			if now.Before(lastLogTime.Add(a.MaxLogFrequency)) {
+				return
+			}
+			state.LastLogTime = now
+		}
+		nots := ns.Get(s.Conf, state.Group)
+		for _, n := range nots {
+			s.Notify(state, n)
+			checkNotify = true
+		}
+	}
+	notifyCurrent := func() {
+		// Auto close ignoreUnknowns.
+		if a.IgnoreUnknown && event.Status == StUnknown {
+			state.Open = false
+			state.Forgotten = true
+			state.NeedAck = false
+			state.Action("bosun", "Auto close because alert has ignoreUnknown.", ActionClose, event.Time)
+			slog.Infof("auto close %s because alert has ignoreUnknown", ak)
+			return
+		} else if silenced[ak].Forget && event.Status == StUnknown {
+			state.Open = false
+			state.Forgotten = true
+			state.NeedAck = false
+			state.Action("bosun", "Auto close because alert is silenced and marked auto forget.", ActionClose, event.Time)
+			slog.Infof("auto close %s because alert is silenced and marked auto forget", ak)
+			return
+		}
+		state.NeedAck = true
+		switch event.Status {
+		case StCritical, StUnknown:
+			notify(a.CritNotification)
+		case StWarning:
+			notify(a.WarnNotification)
+		}
+	}
+	clearOld := func() {
+		state.NeedAck = false
+		delete(s.Notifications, ak)
+	}
+	// lock while we change notifications.
+	s.Lock("RunHistory")
+	// last could be StNone if it is new. Set it to normal if so because StNormal >
+	// StNone. If the state is not open (closed), then the last state we care about
+	// isn't the last abnormal state, it's just normal.
+	if last < StNormal || !wasOpen {
+		last = StNormal
+	}
+	if event.Status > last {
+		clearOld()
+		notifyCurrent()
+	} else if event.Status < last {
+		if _, hasOld := s.Notifications[ak]; hasOld {
+			notifyCurrent()
+		}
+		// Auto close silenced alerts.
+		if _, ok := silenced[ak]; ok && event.Status == StNormal {
+			go func(ak expr.AlertKey) {
+				slog.Infof("auto close %s because was silenced", ak)
+				err := s.Action("bosun", "Auto close because was silenced.", ActionClose, ak)
+				if err != nil {
+					slog.Errorln(err)
+				}
+			}(ak)
+		}
+	}
+	s.Unlock()
+	return checkNotify
 }
 
 func (s *Schedule) executeTemplates(state *State, event *Event, a *conf.Alert, r *RunHistory) {
