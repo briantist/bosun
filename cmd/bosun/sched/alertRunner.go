@@ -39,23 +39,18 @@ func (s *Schedule) updateCheckContext() {
 func (s *Schedule) RunAlert(a *conf.Alert) {
 	for {
 		wait := time.After(s.Conf.CheckFrequency * time.Duration(a.RunEvery))
-		start := time.Now()
-		rh := s.checkAlert(a)
-		dur := time.Since(start)
-		start = time.Now()
-
-		s.RunHistory(rh)
-		dur = time.Since(start)
-		slog.Infof("runHistory on %s took %v\n", a.Name, dur)
+		s.checkAlert(a)
 		<-wait
 	}
 }
 
-func (s *Schedule) checkAlert(a *conf.Alert) *RunHistory {
-	ctx := s.ctx
-	checkTime := ctx.runTime
-	checkCache := ctx.checkCache
+func (s *Schedule) checkAlert(a *conf.Alert) {
+	checkTime := s.ctx.runTime
+	checkCache := s.ctx.checkCache
 	rh := s.NewRunHistory(checkTime, checkCache)
 	s.CheckAlert(nil, rh, a)
-	return rh
+
+	start := time.Now()
+	s.RunHistory(rh)
+	slog.Infof("runHistory on %s took %v\n", a.Name, time.Since(start))
 }

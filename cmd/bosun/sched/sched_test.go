@@ -15,9 +15,11 @@ import (
 	"bosun.org/cmd/bosun/conf"
 	"bosun.org/cmd/bosun/expr"
 	"bosun.org/opentsdb"
+	"bosun.org/slog"
 )
 
 func init() {
+	slog.Set(&slog.StdLog{log.New(ioutil.Discard, "", log.LstdFlags)})
 	log.SetOutput(ioutil.Discard)
 }
 
@@ -31,6 +33,14 @@ type schedTest struct {
 	// state -> active
 	state    map[schedState]bool
 	previous map[expr.AlertKey]*State
+}
+
+// test-only function to check all alerts immediately.
+func check(s *Schedule, t time.Time) {
+	for _, a := range s.Conf.Alerts {
+		s.ctx.runTime = t
+		s.checkAlert(a)
+	}
 }
 
 func testSched(t *testing.T, st *schedTest) (s *Schedule) {
@@ -76,7 +86,7 @@ func testSched(t *testing.T, st *schedTest) (s *Schedule) {
 	if st.previous != nil {
 		s.status = st.previous
 	}
-	s.Check(nil, queryTime, 0)
+	check(s, queryTime)
 	groups, err := s.MarshalGroups(new(miniprofiler.Profile), "")
 	if err != nil {
 		t.Error(err)
