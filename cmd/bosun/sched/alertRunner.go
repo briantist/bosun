@@ -39,25 +39,23 @@ func (s *Schedule) updateCheckContext() {
 func (s *Schedule) RunAlert(a *conf.Alert) {
 	for {
 		wait := time.After(s.Conf.CheckFrequency * time.Duration(a.RunEvery))
-		slog.Infof("starting check on %s", a.Name)
-		//run the alert
 		start := time.Now()
-		ctx := s.ctx
-		checkTime := ctx.runTime
-		checkCache := ctx.checkCache
-		rh := s.NewRunHistory(checkTime, checkCache)
-		for _, ak := range s.findUnknownAlerts(checkTime) { //TODO: findUnknown more targeted on alert
-			if ak.Name() == a.Name {
-				rh.Events[ak] = &Event{Status: StUnknown}
-			}
-		}
-		s.CheckAlert(nil, rh, a)
+		rh := s.checkAlert(a)
 		dur := time.Since(start)
-		slog.Infof("check on %s took %v\n", a.Name, dur)
 		start = time.Now()
+
 		s.RunHistory(rh)
 		dur = time.Since(start)
 		slog.Infof("runHistory on %s took %v\n", a.Name, dur)
 		<-wait
 	}
+}
+
+func (s *Schedule) checkAlert(a *conf.Alert) *RunHistory {
+	ctx := s.ctx
+	checkTime := ctx.runTime
+	checkCache := ctx.checkCache
+	rh := s.NewRunHistory(checkTime, checkCache)
+	s.CheckAlert(nil, rh, a)
+	return rh
 }

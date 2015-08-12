@@ -408,10 +408,11 @@ func TestCheckNotifyLog(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.Check(nil, time.Now(), 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	rh := s.NewRunHistory(time.Now(), nil)
+	e := &Event{}
+	e.Status = StWarning
+	rh.Events["a{}"] = e
+	s.RunHistory(rh)
 	s.CheckNotifications()
 	gotA := false
 	gotB := false

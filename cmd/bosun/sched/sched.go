@@ -553,8 +553,8 @@ type State struct {
 
 func (s *State) Copy() *State {
 	newState := &State{
-		History:      make([]Event, len(s.History)),
-		Actions:      make([]Action, len(s.Actions)),
+		History:      s.History, //history and actions safe to copy as long as elements are not modified. Appending will not affect original state.
+		Actions:      s.Actions,
 		Touched:      s.Touched,
 		Alert:        s.Alert,
 		Tags:         s.Tags,
@@ -571,12 +571,6 @@ func (s *State) Copy() *State {
 		LastLogTime:  s.LastLogTime,
 	}
 	newState.Result = s.Result
-	for i := range s.History {
-		newState.History[i] = s.History[i]
-	}
-	for i := range s.Actions {
-		newState.Actions[i] = s.Actions[i]
-	}
 	return newState
 }
 

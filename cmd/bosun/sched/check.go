@@ -2,7 +2,6 @@ package sched
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 	"bosun.org/graphite"
 	"bosun.org/metadata"
 	"bosun.org/opentsdb"
+	"bosun.org/slog"
 )
 
 func init() {
@@ -45,7 +45,9 @@ func NewStatus(ak expr.AlertKey) *State {
 func (s *Schedule) GetStatus(ak expr.AlertKey) *State {
 	s.Lock("GetStatus")
 	state := s.status[ak]
-	state = state.Copy()
+	if state != nil {
+		state = state.Copy()
+	}
 	s.Unlock()
 	return state
 }
@@ -178,14 +180,14 @@ func (s *Schedule) RunHistory(r *RunHistory) {
 				state.Forgotten = true
 				state.NeedAck = false
 				state.Action("bosun", "Auto close because alert has ignoreUnknown.", ActionClose, event.Time)
-				log.Printf("auto close %s because alert has ignoreUnknown", ak)
+				slog.Infof("auto close %s because alert has ignoreUnknown", ak)
 				return
 			} else if silenced[ak].Forget && event.Status == StUnknown {
 				state.Open = false
 				state.Forgotten = true
 				state.NeedAck = false
 				state.Action("bosun", "Auto close because alert is silenced and marked auto forget.", ActionClose, event.Time)
-				log.Printf("auto close %s because alert is silenced and marked auto forget", ak)
+				slog.Infof("auto close %s because alert is silenced and marked auto forget", ak)
 				return
 			}
 			state.NeedAck = true
@@ -217,10 +219,10 @@ func (s *Schedule) RunHistory(r *RunHistory) {
 			// Auto close silenced alerts.
 			if _, ok := silenced[ak]; ok && event.Status == StNormal {
 				go func(ak expr.AlertKey) {
-					log.Printf("auto close %s because was silenced", ak)
+					slog.Infof("auto close %s because was silenced", ak)
 					err := s.Action("bosun", "Auto close because was silenced.", ActionClose, ak)
 					if err != nil {
-						log.Println(err)
+						slog.Errorln(err)
 					}
 				}(ak)
 			}
@@ -244,21 +246,21 @@ func (s *Schedule) executeTemplates(state *State, event *Event, a *conf.Alert, r
 		endTiming := collect.StartTimer(metric, opentsdb.TagSet{"alert": a.Name, "type": "subject"})
 		subject, serr := s.ExecuteSubject(r, a, state, false)
 		if serr != nil {
-			log.Printf("%s: %v", state.AlertKey(), serr)
+			slog.Infof("%s: %v", state.AlertKey(), serr)
 		}
 		endTiming()
 		//Render body
 		endTiming = collect.StartTimer(metric, opentsdb.TagSet{"alert": a.Name, "type": "body"})
 		body, _, berr := s.ExecuteBody(r, a, state, false)
 		if berr != nil {
-			log.Printf("%s: %v", state.AlertKey(), berr)
+			slog.Infof("%s: %v", state.AlertKey(), berr)
 		}
 		endTiming()
 		//Render email body
 		endTiming = collect.StartTimer(metric, opentsdb.TagSet{"alert": a.Name, "type": "emailbody"})
 		emailbody, attachments, merr := s.ExecuteBody(r, a, state, true)
 		if merr != nil {
-			log.Printf("%s: %v", state.AlertKey(), merr)
+			slog.Infof("%s: %v", state.AlertKey(), merr)
 		}
 		endTiming()
 		//Render email subject
@@ -331,13 +333,13 @@ func (s *Schedule) CollectStates() {
 				ts.Copy().Merge(opentsdb.TagSet{"severity": severity}),
 				severityCounts[alertName][severity])
 			if err != nil {
-				log.Println(err)
+				slog.Errorln(err)
 			}
 			err = collect.Put("alerts.last_abnormal_severity",
 				ts.Copy().Merge(opentsdb.TagSet{"severity": severity}),
 				abnormalCounts[alertName][severity])
 			if err != nil {
-				log.Println(err)
+				slog.Errorln(err)
 			}
 		}
 		err := collect.Put("alerts.acknowledgement_status",
@@ -347,19 +349,19 @@ func (s *Schedule) CollectStates() {
 			ts.Copy().Merge(opentsdb.TagSet{"status": "acknowledged"}),
 			ackStatusCounts[alertName][false])
 		if err != nil {
-			log.Println(err)
+			slog.Errorln(err)
 		}
 		err = collect.Put("alerts.active_status",
 			ts.Copy().Merge(opentsdb.TagSet{"status": "active"}),
 			activeStatusCounts[alertName][true])
 		if err != nil {
-			log.Println(err)
+			slog.Errorln(err)
 		}
 		err = collect.Put("alerts.active_status",
 			ts.Copy().Merge(opentsdb.TagSet{"status": "inactive"}),
 			activeStatusCounts[alertName][false])
 		if err != nil {
-			log.Println(err)
+			slog.Errorln(err)
 		}
 	}
 }
@@ -386,17 +388,18 @@ func (r *RunHistory) GetUnknownAndUnevaluatedAlertKeys(alert string) (unknown, u
 
 var bosunStartupTime = time.Now()
 
-func (s *Schedule) findUnknownAlerts(now time.Time) []expr.AlertKey {
+func (s *Schedule) findUnknownAlerts(now time.Time, alert string) []expr.AlertKey {
 	keys := []expr.AlertKey{}
 	if time.Now().Sub(bosunStartupTime) < s.Conf.CheckFrequency {
 		return keys
 	}
 	s.Lock("FindUnknown")
 	for ak, st := range s.status {
-		if st.Forgotten || st.Status() == StError {
+		name := ak.Name()
+		if name != alert || st.Forgotten || st.Status() == StError {
 			continue
 		}
-		a := s.Conf.Alerts[ak.Name()]
+		a := s.Conf.Alerts[name]
 		t := a.Unknown
 		if t == 0 {
 			t = s.Conf.CheckFrequency * 2 * time.Duration(a.RunEvery)
@@ -411,8 +414,11 @@ func (s *Schedule) findUnknownAlerts(now time.Time) []expr.AlertKey {
 }
 
 func (s *Schedule) CheckAlert(T miniprofiler.Timer, r *RunHistory, a *conf.Alert) {
-	log.Printf("check alert %v start", a.Name)
+	slog.Infof("check alert %v start", a.Name)
 	start := time.Now()
+	for _, ak := range s.findUnknownAlerts(r.Start, a.Name) {
+		r.Events[ak] = &Event{Status: StUnknown}
+	}
 	var warns, crits expr.AlertKeys
 	d, err := s.executeExpr(T, r, a, a.Depends)
 	var deps expr.ResultSlice
@@ -429,7 +435,7 @@ func (s *Schedule) CheckAlert(T miniprofiler.Timer, r *RunHistory, a *conf.Alert
 	}
 
 	collect.Put("check.duration", opentsdb.TagSet{"name": a.Name}, time.Since(start).Seconds())
-	log.Printf("check alert %v done (%s): %v crits, %v warns, %v unevaluated, %v unknown", a.Name, time.Since(start), len(crits), len(warns), unevalCount, unknownCount)
+	slog.Infof("check alert %v done (%s): %v crits, %v warns, %v unevaluated, %v unknown", a.Name, time.Since(start), len(crits), len(warns), unevalCount, unknownCount)
 }
 
 func removeUnknownEvents(evs map[expr.AlertKey]*Event, alert string) {
@@ -515,7 +521,7 @@ func (s *Schedule) CheckExpr(T miniprofiler.Timer, rh *RunHistory, a *conf.Alert
 			return
 		}
 		collect.Add("check.errs", opentsdb.TagSet{"metric": a.Name}, 1)
-		log.Println(err)
+		slog.Errorln(err)
 	}()
 	results, err := s.executeExpr(T, rh, a, e)
 	if err != nil {
