@@ -380,7 +380,6 @@ func (s *Schedule) CollectStates() {
 func (r *RunHistory) GetUnknownAndUnevaluatedAlertKeys(alert string) (unknown, uneval []expr.AlertKey) {
 	unknown = []expr.AlertKey{}
 	uneval = []expr.AlertKey{}
-
 	r.schedule.Lock("GetUnknownUneval")
 	for ak, st := range r.schedule.status {
 		if ak.Name() != alert {
@@ -388,12 +387,11 @@ func (r *RunHistory) GetUnknownAndUnevaluatedAlertKeys(alert string) (unknown, u
 		}
 		if st.Last().Status == StUnknown {
 			unknown = append(unknown, ak)
-		} else if st.Last().Unevaluated {
+		} else if st.Unevaluated {
 			uneval = append(uneval, ak)
 		}
 	}
 	r.schedule.Unlock()
-
 	return unknown, uneval
 }
 
@@ -444,7 +442,6 @@ func (s *Schedule) CheckAlert(T miniprofiler.Timer, r *RunHistory, a *conf.Alert
 	if err != nil {
 		removeUnknownEvents(r.Events, a.Name)
 	}
-
 	collect.Put("check.duration", opentsdb.TagSet{"name": a.Name}, time.Since(start).Seconds())
 	slog.Infof("check alert %v done (%s): %v crits, %v warns, %v unevaluated, %v unknown", a.Name, time.Since(start), len(crits), len(warns), unevalCount, unknownCount)
 }
@@ -485,7 +482,6 @@ func markDependenciesUnevaluated(events map[expr.AlertKey]*Event, deps expr.Resu
 			continue
 		}
 		for _, dep := range deps {
-
 			if dep.Group.Overlaps(ak.Group()) {
 				ev.Unevaluated = true
 				unevalCount++

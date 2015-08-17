@@ -1309,9 +1309,7 @@ func (c *Conf) alert(s *expr.State, T miniprofiler.Timer, name, key string) (res
 		return nil, err
 	}
 	if s.History != nil {
-
 		unknownTags, unevalTags := s.History.GetUnknownAndUnevaluatedAlertKeys(name)
-
 		// For currently unknown tags NOT in the result set, add an error result
 		for _, ak := range unknownTags {
 			found := false
@@ -1330,13 +1328,21 @@ func (c *Conf) alert(s *expr.State, T miniprofiler.Timer, name, key string) (res
 			}
 		}
 		//For all unevaluated tags in run history, make sure we report a nonzero result.
-	Loop:
-		for _, result := range results.Results {
-			for _, ak := range unevalTags {
+		for _, ak := range unevalTags {
+			found := false
+			for _, result := range results.Results {
 				if result.Group.Equal(ak.Group()) {
 					result.Value = expr.Number(1)
-					break Loop
+					found = true
+					break
 				}
+			}
+			if !found {
+				res := expr.Result{
+					Value: expr.Number(1),
+					Group: ak.Group(),
+				}
+				results.Results = append(results.Results, &res)
 			}
 		}
 	}

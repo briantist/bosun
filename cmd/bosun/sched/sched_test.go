@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sort"
 	"testing"
 	"time"
 
@@ -37,7 +38,13 @@ type schedTest struct {
 
 // test-only function to check all alerts immediately.
 func check(s *Schedule, t time.Time) {
-	for _, a := range s.Conf.Alerts {
+	names := []string{}
+	for a := range s.Conf.Alerts {
+		names = append(names, a)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		a := s.Conf.Alerts[n]
 		s.ctx.runTime = t
 		s.checkAlert(a)
 	}
