@@ -120,7 +120,7 @@ func (s *Schedule) sendNotifications(silenced map[expr.AlertKey]Silence) {
 }
 
 func (s *Schedule) sendUnknownNotifications() {
-	for n, states := range s.pendingNotifications {
+	for n, states := range s.pendingUnknowns {
 		ustates := make(States)
 		for _, st := range states {
 			ustates[st.AlertKey()] = st
@@ -147,6 +147,7 @@ func (s *Schedule) sendUnknownNotifications() {
 			s.utnotify(oTSets, n)
 		}
 	}
+	s.pendingUnknowns = make(map[*conf.Notification][]*State)
 }
 
 var unknownMultiGroup = ttemplate.Must(ttemplate.New("unknownMultiGroup").Parse(`

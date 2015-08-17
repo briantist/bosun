@@ -445,6 +445,7 @@ func (s *Schedule) Init(c *conf.Conf) error {
 	s.Group = make(map[time.Time]expr.AlertKeys)
 	s.Metadata = make(map[metadata.Metakey]*Metavalue)
 	s.Incidents = make(map[uint64]*Incident)
+	s.pendingUnknowns = make(map[*conf.Notification][]*State)
 	s.status = make(States)
 	s.Search = search.NewSearch()
 	s.ctx = &checkContext{time.Now(), cache.New(0)}
