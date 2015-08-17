@@ -281,6 +281,7 @@ func TestCheckNotifyUnknown(t *testing.T) {
 	}
 	s.RunHistory(r)
 	s.CheckNotifications()
+	s.sendUnknownNotifications()
 	gotExpected := false
 Loop:
 	for {
@@ -343,6 +344,7 @@ func TestCheckNotifyUnknownDefault(t *testing.T) {
 	}
 	s.RunHistory(r)
 	s.CheckNotifications()
+	s.sendUnknownNotifications()
 	gotExpected := false
 Loop:
 	for {
