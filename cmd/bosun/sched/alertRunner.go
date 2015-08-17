@@ -18,7 +18,7 @@ func (s *Schedule) Run() error {
 	if s.Conf.Ping {
 		go s.PingHosts()
 	}
-	go s.Poll()
+	go s.dispatchNotifications()
 	go s.performSave()
 	go s.updateCheckContext()
 	for _, a := range s.Conf.Alerts {

@@ -107,7 +107,10 @@ func (s *Schedule) RunHistory(r *RunHistory) {
 		checkNotify = s.runHistory(r, ak, event, silenced) || checkNotify
 	}
 	if checkNotify && s.nc != nil {
-		s.nc <- true
+		select {
+		case s.nc <- true:
+		default:
+		}
 	}
 }
 

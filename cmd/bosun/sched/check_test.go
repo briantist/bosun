@@ -44,12 +44,12 @@ func TestCheckFlapping(t *testing.T) {
 	}
 	hasNots := func() bool {
 		defer func() {
-			s.notifications = nil
+			s.pendingNotifications = nil
 		}()
-		if len(s.notifications) != 1 {
+		if len(s.pendingNotifications) != 1 {
 			return false
 		}
-		for k, v := range s.notifications {
+		for k, v := range s.pendingNotifications {
 			if k.Name != "n" || len(v) != 1 || v[0].Alert != "a" {
 				return false
 			}
@@ -59,7 +59,7 @@ func TestCheckFlapping(t *testing.T) {
 	}
 	s.RunHistory(r)
 	if !hasNots() {
-		t.Fatalf("expected notification: %v", s.notifications)
+		t.Fatalf("expected notification: %v", s.pendingNotifications)
 	}
 	r.Events[ak].Status = StNormal
 	s.RunHistory(r)

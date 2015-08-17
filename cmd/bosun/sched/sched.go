@@ -35,19 +35,23 @@ type Schedule struct {
 	mutexAquired  time.Time
 	mutexWaitTime int64
 
-	Conf          *conf.Conf
-	status        States
-	Notifications map[expr.AlertKey]map[string]time.Time
-	Silence       map[string]*Silence
-	Group         map[time.Time]expr.AlertKeys
-	Metadata      map[metadata.Metakey]*Metavalue
-	Incidents     map[uint64]*Incident
-	Search        *search.Search
+	Conf      *conf.Conf
+	status    States
+	Silence   map[string]*Silence
+	Group     map[time.Time]expr.AlertKeys
+	Metadata  map[metadata.Metakey]*Metavalue
+	Incidents map[uint64]*Incident
+	Search    *search.Search
 
-	// TODO: This makes little sense now too.
-	LastCheck     time.Time
-	nc            chan interface{}
-	notifications map[*conf.Notification][]*State
+	//channel signals an alert has added notifications, and notifications should be processed.
+	nc chan interface{}
+	//notifications to be sent immediately
+	pendingNotifications map[*conf.Notification][]*State
+	//notifications we are currently tracking, potentially with future or repeated actions.
+	Notifications map[expr.AlertKey]map[string]time.Time
+	//unknown states that need to be notified about. Collected and sent in batches.
+	pendingUnknowns map[*conf.Notification][]*State
+
 	metalock      sync.Mutex
 	maxIncidentId uint64
 	incidentLock  sync.Mutex
