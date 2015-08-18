@@ -40,6 +40,7 @@ func (s *Schedule) RunAlert(a *conf.Alert) {
 	for {
 		wait := time.After(s.Conf.CheckFrequency * time.Duration(a.RunEvery))
 		s.checkAlert(a)
+		s.LastCheck = time.Now()
 		<-wait
 	}
 }

@@ -57,6 +57,8 @@ type Schedule struct {
 	incidentLock  sync.Mutex
 	db            *bolt.DB
 
+	LastCheck time.Time
+
 	ctx *checkContext
 }
 
@@ -448,6 +450,7 @@ func (s *Schedule) Init(c *conf.Conf) error {
 	s.pendingUnknowns = make(map[*conf.Notification][]*State)
 	s.status = make(States)
 	s.Search = search.NewSearch()
+	s.LastCheck = time.Now()
 	s.ctx = &checkContext{time.Now(), cache.New(0)}
 	if c.StateFile != "" {
 		s.db, err = bolt.Open(c.StateFile, 0600, nil)

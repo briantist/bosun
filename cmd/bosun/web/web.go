@@ -287,8 +287,6 @@ func Shorten(w http.ResponseWriter, r *http.Request) {
 	req.Body.Close()
 }
 
-//TODO: not so good a health check anymore.
-//Perhaps a debug endpoint for which checks are running for how long would be useful.
 type Health struct {
 	// RuleCheck is true if last check happened within the check frequency window.
 	RuleCheck bool
